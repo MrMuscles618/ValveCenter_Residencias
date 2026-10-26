@@ -1,0 +1,1295 @@
+/* Vista de almacén digital: escáner, recepción y racks Kanban */
+:root {
+    --rack-poste: #2f62c4;           /* tubo azul de los racks */
+    --rack-riel: #2b2f36;            /* travesaño negro con etiquetas */
+    --bin-verde: #1f9d55;
+    --bin-verde-claro: #43b873;
+    --bin-azul: #3d83d1;
+    --bin-azul-claro: #6aa6e6;
+    /*Posibles cajas de carton*/
+    --bin-cafe: #884513;
+    --bin-cafe-claro: #876540;
+}
+
+.almacen {
+    display: grid;
+    grid-template-columns: 380px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+.almacen-lateral {
+    position: sticky;
+    top: calc(var(--topbar-h) + 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: calc(100dvh - var(--topbar-h) - 32px);
+    overflow-y: auto;
+    padding: 2px;
+    margin: -2px;
+}
+
+.seccion-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.seccion-titulo {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--txt2);
+}
+
+/* Buscador de la topbar */
+.buscador {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: min(320px, 50vw);
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: var(--fill);
+    color: var(--txt3);
+}
+.buscador:focus-within { background: #fff; box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.18); }
+.buscador input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; color: var(--txt1); font-size: 14px; }
+
+/* ---------- Escáner ---------- */
+.escaner { padding: 16px; }
+.etiqueta-lector { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--txt3); }
+.escaner-form { display: flex; gap: 8px; }
+.escaner-form .campo-input { flex: 1; min-width: 0; }
+.escaner-form .campo-input::placeholder { font-family: inherit; letter-spacing: -0.01em; }
+.escaner .aviso { margin-top: 10px; }
+
+/* Caja con la proporción real de la cámara (--proporcion = ancho/alto, la pone Escaner.jsx).
+   El alto se limita y el ancho se ajusta a ese límite: la imagen nunca se estira ni se recorta. */
+.escaner-video {
+    --proporcion: 4 / 3;
+    --alto-max: min(52dvh, 420px);
+    position: relative;
+    width: min(100%, calc(var(--alto-max) * var(--proporcion)));
+    margin: 12px auto 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: var(--proporcion);
+}
+.escaner-video video,
+.escaner-video canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Mira con forma fija de código de barras, centrada sin importar la proporción de la cámara */
+.escaner-mira {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 76%;
+    max-height: 60%;
+    aspect-ratio: 5 / 2;
+    transform: translate(-50%, -50%);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    border-radius: 12px;
+    box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+}
+.escaner-mira::after {
+    content: "";
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    top: 50%;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: barrido 1.6s ease-in-out infinite alternate;
+}
+
+.lectura {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid var(--hairline);
+}
+.lectura.vacia { background: var(--fill); border-style: dashed; }
+.lectura-vacia { font-size: 13px; color: var(--txt3); text-align: center; }
+.lectura-barras { position: relative; display: flex; justify-content: center; overflow: hidden; padding: 4px 0; }
+.lectura-barras .codigo-barras { max-width: 100%; height: auto; }
+.lectura-laser {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 10px 2px rgba(0, 113, 227, 0.55);
+    opacity: 0;
+}
+.lectura.leyendo .lectura-laser { animation: laser 0.7s ease-in-out; }
+.lectura.leyendo { animation: destello 0.7s ease; }
+.lectura-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--txt3); }
+.lectura .aviso { margin-top: 10px; }
+
+@keyframes laser {
+    0% { top: 0; opacity: 1; }
+    50% { top: calc(100% - 2px); opacity: 1; }
+    100% { top: 0; opacity: 0; }
+}
+@keyframes barrido { from { top: 15%; } to { top: 85%; } }
+@keyframes destello { 0% { box-shadow: 0 0 0 0 rgba(0, 113, 227, 0.35); } 100% { box-shadow: 0 0 0 10px rgba(0, 113, 227, 0); } }
+
+/* ---------- Recepción ---------- */
+.recepcion {
+    padding: 16px;
+    transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+.recepcion.acepta { box-shadow: inset 0 0 0 2px rgba(0, 113, 227, 0.35), var(--shadow-sm); }
+.recepcion.sobre { background: rgba(232, 242, 255, 0.85); box-shadow: inset 0 0 0 2px var(--accent), var(--shadow-md); }
+.recepcion-vacia {
+    padding: 22px 12px;
+    border-radius: var(--radius-md);
+    border: 1.5px dashed var(--fill-strong);
+    text-align: center;
+    font-size: 13px;
+    color: var(--txt3);
+}
+.lista-recepcion { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.tarjeta-articulo {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px 10px 6px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-sm);
+    transition: opacity 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    animation: aparecer 0.2s ease;
+}
+.tarjeta-articulo.arrastrando { opacity: 0.35; }
+.tarjeta-articulo.seleccionado { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2); }
+.tarjeta-articulo.atenuado { opacity: 0.4; }
+.tarjeta-asa {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 52px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--txt3);
+    cursor: grab;
+    touch-action: none;
+}
+.tarjeta-asa:hover { background: var(--fill); color: var(--txt2); }
+.tarjeta-asa:active { cursor: grabbing; }
+.tarjeta-articulo.seleccionado .tarjeta-asa { background: var(--accent); color: #fff; }
+.tarjeta-cuerpo { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.codigo-barras.mini { height: 22px; width: auto; max-width: 100%; align-self: flex-start; }
+.tarjeta-codigo { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tarjeta-descripcion {
+    border: 0;
+    border-radius: 6px;
+    padding: 2px 4px;
+    margin-left: -4px;
+    background: transparent;
+    font-size: 12px;
+    color: var(--txt2);
+    outline: none;
+}
+.tarjeta-descripcion:focus { background: var(--fill); }
+.tarjeta-descripcion::placeholder { color: var(--txt3); }
+.tarjeta-lado { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+.cantidad {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    border-radius: 9px;
+    background: var(--fill);
+    padding: 2px;
+}
+.cantidad button {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    font-weight: 600;
+}
+.cantidad button:hover { background: #fff; box-shadow: var(--shadow-sm); }
+.cantidad input {
+    width: 40px;
+    border: 0;
+    background: transparent;
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    outline: none;
+}
+.cantidad input::-webkit-inner-spin-button,
+.cantidad input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------- Historial (desplegable en el sidebar) ---------- */
+.sidebar-historial { margin-top: 14px; border-top: 1px solid var(--hairline); padding-top: 8px; }
+.sidebar-historial summary { list-style: none; cursor: pointer; }
+.sidebar-historial summary::-webkit-details-marker { display: none; }
+.sidebar-historial .sidebar-cuenta { margin-left: auto; }
+.sidebar-flecha { flex: 0 0 auto; margin-left: auto; color: var(--txt3); transition: transform 0.2s ease; }
+.sidebar-historial .sidebar-cuenta + .sidebar-flecha { margin-left: 0; }
+.sidebar-historial[open] .sidebar-flecha { transform: rotate(90deg); }
+.sidebar-historial ul {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0 6px 0 10px;
+    display: flex;
+    flex-direction: column;
+    animation: aparecer 0.2s ease;
+}
+.sidebar-historial li {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 6px;
+    padding: 6px 0;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--txt2);
+    border-top: 1px solid var(--divider);
+    overflow-wrap: anywhere;
+}
+.sidebar-historial li:first-child { border-top: 0; }
+/* Racks Kanban: mismo desplegable, sin la línea superior y con la lista un poco sangrada */
+.sidebar-kanbans { margin-top: 6px; border-top: 0; padding-top: 0; }
+.sidebar-kanbans-lista { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; padding-left: 10px; animation: aparecer 0.2s ease; }
+.sidebar-historial-vacio { margin: 4px 10px; font-size: 12px; color: var(--txt3); }
+.historial-hora { color: var(--txt3); font-variant-numeric: tabular-nums; }
+
+/* ---------- Racks ---------- */
+.almacen-racks { padding: 18px; min-width: 0; }
+.racks-encabezado { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.racks-info { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px; }
+.kanban-letrero {
+    padding: 4px 12px;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-sm);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+}
+.barra-seleccion { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+
+.kanban-racks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    align-items: flex-start;
+}
+/* El ancho del rack sale del espacio disponible, no del contenido: como máximo columnas de 132 px (--columnas lo
+   pone Rack.jsx) y, si no caben, se encogen hasta 64 px; por debajo de eso el rack se desplaza dentro de su tarjeta
+   en lugar de salirse (antes Kanban 4, con 9 columnas, sacaba la última fuera del marco).
+   46 px = postes (14) + relleno de la estructura (24) + relleno de las ranuras (8). */
+.rack {
+    --ideal: calc(var(--columnas, 4) * 132px + (var(--columnas, 4) - 1) * 8px + 46px);
+    --minimo: calc(var(--columnas, 4) * 64px + (var(--columnas, 4) - 1) * 8px + 46px);
+    flex: 0 1 auto;
+    width: min(100%, var(--ideal));
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 10px; /* espacio para las patas del rack, que el desplazamiento recortaría */
+}
+.rack-titulo {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin: 0 4px 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.rack-cuenta { font-size: 12px; font-weight: 500; color: var(--txt3); font-variant-numeric: tabular-nums; }
+
+/* Estructura: postes azules a los lados, niveles con riel negro */
+.rack-estructura {
+    position: relative;
+    padding: 8px 12px 14px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(47, 98, 196, 0.06), rgba(47, 98, 196, 0.02));
+    border-left: 7px solid var(--rack-poste);
+    border-right: 7px solid var(--rack-poste);
+    min-width: var(--minimo, 0px);
+}
+.rack-estructura::after {           /* patas */
+    content: "";
+    position: absolute;
+    left: -7px;
+    right: -7px;
+    bottom: -8px;
+    height: 8px;
+    background:
+        linear-gradient(var(--rack-poste), var(--rack-poste)) left / 7px 100% no-repeat,
+        linear-gradient(var(--rack-poste), var(--rack-poste)) right / 7px 100% no-repeat;
+}
+.flujo .rack-estructura {           /* rodillos del rack FIFO */
+    background:
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.035) 0 10px, transparent 10px 20px),
+        linear-gradient(180deg, rgba(47, 98, 196, 0.06), rgba(47, 98, 196, 0.02));
+}
+
+.rack-nivel { padding-top: 8px; }
+.rack-ranuras {
+    display: grid;
+    grid-template-columns: repeat(var(--columnas), minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 4px;
+}
+.rack-riel {
+    display: grid;
+    grid-template-columns: repeat(var(--columnas), minmax(0, 1fr));
+    gap: 8px;
+    margin: 4px -12px 0;
+    padding: 3px 16px;
+    background: var(--rack-riel);
+    border-radius: 3px;
+}
+.rack-riel span {
+    justify-self: center;
+    padding: 0 6px;
+    border-radius: 2px;
+    background: #fff;
+    color: var(--txt1);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Ranura = contenedor de plástico */
+.ranura { position: relative; border-radius: 9px; transition: transform 0.15s ease; }
+.contenedor {
+    --bin: var(--bin-azul);
+    --bin-claro: var(--bin-azul-claro);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    height: 66px;
+    padding: 10px 6px 6px;
+    border: 0;
+    border-radius: 6px 6px 9px 9px;
+    background:
+        linear-gradient(180deg, var(--bin-claro) 0 7px, var(--bin) 7px 100%);
+    box-shadow:
+        inset 0 -4px 0 rgba(0, 0, 0, 0.14),
+        inset 3px 0 0 rgba(255, 255, 255, 0.12),
+        inset -3px 0 0 rgba(0, 0, 0, 0.08),
+        0 1px 2px rgba(0, 0, 0, 0.15);
+    color: var(--txt1);
+    touch-action: none;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.ranura.verde .contenedor { --bin: var(--bin-verde); --bin-claro: var(--bin-verde-claro); }
+.ranura.cafe .contenedor { --bin: var(--bin-cafe); --bin-claro: var(--bin-cafe-claro); }
+.ranura.ocupada .contenedor { cursor: grab; }
+.ranura.ocupada .contenedor:active { cursor: grabbing; }
+.ranura.ocupada:hover { transform: translateY(-1px); }
+.ranura.ocupada:hover .contenedor { filter: brightness(1.05); }
+
+/* Etiqueta blanca pegada al frente del contenedor */
+.contenedor-etiqueta {
+    padding: 1px 8px;
+    border-radius: 3px;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12);
+}
+.contenedor-codigo,
+.contenedor-cantidad,
+.contenedor-vacio {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    line-height: 1.2;
+    color: #fff;
+}
+.contenedor-codigo { font-weight: 600; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25); }
+/* Ranura con varios códigos: el primero y cuántos más hay (+N) */
+.contenedor-codigos { display: flex; align-items: center; justify-content: center; gap: 3px; max-width: 100%; min-width: 0; }
+.contenedor-codigos .contenedor-codigo { min-width: 0; }
+.contenedor-mas {
+    flex: none;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.5;
+}
+.contenedor-cantidad { opacity: 0.85; font-variant-numeric: tabular-nums; }
+.contenedor-vacio { color: var(--txt3); font-weight: 500; }
+
+/* Ranura libre: contenedor vacío, translúcido y con borde discontinuo */
+.ranura.vacia .contenedor {
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 0 1.5px var(--fill-strong);
+    cursor: default;
+}
+.ranura.vacia .contenedor::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border-top: 7px solid color-mix(in srgb, var(--bin) 35%, transparent);
+    pointer-events: none;
+}
+.ranura.destino.vacia .contenedor { cursor: pointer; box-shadow: inset 0 0 0 1.5px rgba(0, 113, 227, 0.5); }
+.ranura.destino.vacia .contenedor:hover { background: var(--accent-soft); }
+
+/* Estados de arrastre */
+.ranura.origen .contenedor { opacity: 0.3; }
+.ranura.sobre { transform: scale(1.05); z-index: 2; }
+.ranura.sobre .contenedor { box-shadow: 0 0 0 3px var(--accent), var(--shadow-md); }
+.ranura.sobre.vacia .contenedor { background: rgba(232, 242, 255, 0.95); }
+.ranura.sobre .contenedor-vacio { color: var(--accent); font-weight: 600; }
+.ranura.resaltada .contenedor { animation: pulso 0.9s ease-in-out 3; }
+
+@keyframes pulso {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 113, 227, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(0, 113, 227, 0.55); }
+}
+
+.leyenda {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--divider);
+    font-size: 12px;
+    color: var(--txt2);
+}
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+.muestra { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+.muestra.verde { background: var(--bin-verde); }
+.muestra.azul { background: var(--bin-azul); }
+.muestra.cafe { background: var(--bin-cafe); }
+.muestra.vacia { background: #fff; box-shadow: inset 0 0 0 1.5px var(--fill-strong); }
+
+/* Vista previa mientras se arrastra */
+.arrastre-fantasma {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: grabbing;
+    transform: rotate(-2deg);
+}
+
+.modal-barras {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: #fff;
+    border: 1px solid var(--hairline);
+}
+.modal-barras .codigo-barras { max-width: 100%; height: auto; }
+.modal-nota { margin-top: 12px; }
+
+/* ---------- Responsivo ---------- */
+/* Pantallas grandes: la columna del lector crece un poco */
+@media (min-width: 1600px) {
+    .almacen { grid-template-columns: 420px minmax(0, 1fr); }
+}
+
+/* Laptop / tablet horizontal: lector y Recepción lado a lado, racks debajo */
+@media (max-width: 1240px) {
+    .almacen { grid-template-columns: 1fr; }
+    .almacen-lateral {
+        position: static;
+        max-height: none;
+        overflow: visible;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+    }
+}
+
+/* Tablet vertical y celular */
+@media (max-width: 860px) {
+    .almacen-racks { padding: 14px; }
+    .filtro-chips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -14px; padding: 4px 14px 8px; scrollbar-width: none; }
+    .filtro-chips::-webkit-scrollbar { display: none; }
+    .filtro-chip { flex: 0 0 auto; }
+
+    /* Cada rack ocupa el ancho disponible y sus ranuras se reparten; si no caben, el rack se desplaza solo */
+    .kanban-racks { flex-direction: column; flex-wrap: nowrap; gap: 18px; }
+    .rack { flex: 1 1 auto; width: 100%; overflow-x: auto; padding-bottom: 10px; }
+    .rack-ranuras,
+    .rack-riel { grid-template-columns: repeat(var(--columnas), minmax(64px, 1fr)); }
+    .rack-estructura { min-width: min-content; }
+
+    .topbar-acciones { flex: 1; justify-content: flex-end; }
+    .buscador { width: auto; flex: 1 1 auto; min-width: 0; max-width: 260px; }
+}
+
+/* Con la cámara encendida en dos columnas: el lector ocupa la fila completa,
+   con la cámara a la izquierda y la última lectura a la derecha */
+@media (min-width: 701px) and (max-width: 1240px) {
+    .escaner.con-camara {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        column-gap: 16px;
+        align-items: start;
+    }
+    .escaner.con-camara > :not(.escaner-video, .lectura) { grid-column: 1 / -1; }
+}
+
+@media (max-width: 700px) {
+    .almacen-lateral { grid-template-columns: 1fr; }
+}
+
+/* Celular */
+@media (max-width: 560px) {
+    .sidebar { width: min(var(--sidebar-w), 86vw); }
+    .topbar { gap: 8px; }
+    .powerbi-texto { display: none; }
+    .powerbi .btn-sm { width: 34px; padding: 0; }
+    .powerbi-menu {
+        position: fixed;
+        top: calc(52px + 6px);
+        left: 12px;
+        right: 12px;
+        width: auto;
+    }
+
+    .escaner,
+    .recepcion { padding: 14px; }
+    .escaner-form { gap: 6px; }
+    .escaner-form .btn-primary { padding: 0 12px; }
+
+    .tarjeta-articulo { grid-template-columns: auto minmax(0, 1fr); }
+    .tarjeta-lado { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; padding-left: 38px; }
+
+    .rack-estructura { padding: 6px 8px 12px; border-left-width: 5px; border-right-width: 5px; }
+    .rack-ranuras { gap: 6px; padding: 0 2px; }
+    .rack-riel { gap: 6px; margin: 4px -8px 0; padding: 3px 10px; }
+    .rack-ranuras,
+    .rack-riel { grid-template-columns: repeat(var(--columnas), minmax(54px, 1fr)); }
+    .contenedor { height: 58px; padding: 9px 3px 4px; }
+    .contenedor-etiqueta { font-size: 11px; padding: 1px 5px; }
+    .contenedor-codigo,
+    .contenedor-cantidad,
+    .contenedor-vacio { font-size: 9px; }
+
+    .leyenda { gap: 6px 12px; }
+}
+
+/* Celulares muy angostos */
+@media (max-width: 380px) {
+    .resumen-tile { padding: 12px; }
+    .resumen-tile-valor { font-size: 22px; }
+    .page-title { font-size: 22px; }
+    .page-subtitle { font-size: 14px; }
+}
+
+/* ---------- Zona de salida ---------- */
+.zona-salida {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    border: 1.5px dashed rgba(215, 0, 21, 0.25);
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.zona-salida .seccion-titulo { color: var(--danger); }
+.zona-salida-texto { margin-top: 2px; font-size: 13px; color: var(--txt3); }
+.zona-salida-icono {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.zona-salida.acepta,
+.zona-salida.destino { border-color: rgba(215, 0, 21, 0.55); cursor: pointer; }
+.zona-salida.sobre {
+    background: rgba(255, 236, 238, 0.85);
+    border-color: var(--danger);
+    border-style: solid;
+    transform: scale(1.02);
+}
+.zona-salida.sobre .zona-salida-icono { background: var(--danger); color: #fff; }
+.zona-salida.sobre .zona-salida-texto { color: var(--danger); font-weight: 600; }
+.salida-descripcion { margin-top: 10px; font-size: 13px; }
+
+/* En la cuadrícula de dos columnas, la zona ocupa todo el ancho */
+@media (max-width: 1240px) {
+    .zona-salida { grid-column: 1 / -1; }
+}
+
+/* ---------- Nuevo rack (formulario emergente) ---------- */
+.sidebar-nuevo-rack .sidebar-icono { color: var(--accent); }
+.modal-ancho { max-width: 720px; }
+.nuevo-rack { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.nuevo-rack-cuerpo { overflow-y: auto; margin: 6px -8px 0; padding: 0 8px 8px; }
+.nuevo-rack-fila { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.nuevo-rack-modulo {
+    margin-top: 16px;
+    padding: 14px 16px 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.35);
+    min-width: 0;
+}
+.nuevo-rack-modulo-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nuevo-rack-rejilla { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
+.nuevo-rack-rejilla .campo-ancho { grid-column: 1 / -1; }
+.nuevo-rack-rejilla select.campo-input { padding-right: 8px; }
+.nuevo-rack-vista {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.4);
+    max-height: 220px;
+    overflow: auto;
+}
+.nuevo-rack-vista-nivel {
+    display: grid;
+    grid-template-columns: repeat(var(--columnas), minmax(34px, 1fr));
+    gap: 4px;
+    padding-bottom: 4px;
+    border-bottom: 3px solid rgba(120, 136, 168, 0.35);
+}
+.nuevo-rack-celda {
+    display: grid;
+    place-items: center;
+    height: 22px;
+    padding: 0 3px;
+    border-radius: 4px;
+    background: var(--bin-azul);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.nuevo-rack-celda.verde { background: var(--bin-verde); }
+.nuevo-rack-celda.cafe { background: var(--bin-cafe); }
+.racks-acciones { display: flex; gap: 6px; margin-left: auto; }
+.btn-peligro { background: var(--danger); }
+.btn-peligro:hover { background: #b80012; }
+.nuevo-rack-agregar { margin-top: 14px; }
+.nuevo-rack-error { color: var(--danger); }
+
+@media (max-width: 860px) {
+    .nuevo-rack { max-height: 92dvh; }
+}
+@media (max-width: 560px) {
+    .nuevo-rack-fila { grid-template-columns: 1fr; gap: 0; }
+    .nuevo-rack-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Editar colores de racks mixtos ---------- */
+.barra-colores { flex-wrap: wrap; }
+.barra-colores-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.barra-colores .filtro-chip { display: inline-flex; align-items: center; gap: 6px; }
+.barra-colores .filtro-chip.activo .muestra { box-shadow: 0 0 0 2px #fff; }
+.pintando .ranura .contenedor { cursor: pointer; }
+.pintando .ranura:hover { transform: translateY(-1px); }
+.pintando .ranura:hover .contenedor { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* En modo color, las ranuras libres muestran su color completo */
+.pintando .ranura.vacia .contenedor { background: color-mix(in srgb, var(--bin) 30%, rgba(255, 255, 255, 0.85)); }
+
+/* Contenido decodificado de la última lectura */
+.lectura-contenido { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--divider); }
+.lectura-contenido-encabezado {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--txt3);
+}
+.lectura-copiar {
+    border: 0;
+    background: var(--fill);
+    color: var(--accent);
+    font: inherit;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.lectura-copiar:hover { background: var(--fill-strong); }
+.lectura-texto {
+    margin: 6px 0 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--txt1);
+    word-break: break-all;
+    white-space: pre-wrap;
+    max-height: 9em;
+    overflow-y: auto;
+}
+.lectura-texto a { color: var(--accent); }
+.lectura-campos { display: grid; gap: 4px; margin: 8px 0 0; font-size: 13px; }
+.lectura-campos > div { display: flex; gap: 8px; justify-content: space-between; }
+.lectura-campos dt { color: var(--txt2); }
+.lectura-campos dd { margin: 0; color: var(--txt1); text-align: right; word-break: break-all; }
+
+/* Contenido del contenedor: FECHA, PESO, LOTE, PIEZAS, PPP, OPER */
+.contenido-campos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 12px;
+    margin: 14px 0 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+.contenido-campos legend { padding: 0; }
+.contenido-campos .campo { margin-top: 8px; gap: 4px; }
+.contenido-campos .campo-label { font-weight: 500; font-size: 12px; color: var(--txt3); }
+@media (max-width: 520px) {
+    .contenido-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.contenido-resumen { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0; }
+.contenido-resumen > div {
+    display: inline-flex;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--fill);
+    font-size: 11px;
+    line-height: 18px;
+}
+.contenido-resumen dt { color: var(--txt3); }
+.contenido-resumen dd { margin: 0; color: var(--txt1); font-weight: 600; }
+.tarjeta-detalles { font-size: 12px; }
+
+.contenido-campos .campo-input[readonly] { background: var(--fill); color: var(--txt2); cursor: default; box-shadow: none; }
+
+/* Ranura seleccionada y panel con su descripción, debajo del módulo */
+.ranura.activa .contenedor { box-shadow: 0 0 0 2.5px var(--bin), 0 0 0 5px color-mix(in srgb, var(--bin) 25%, transparent); }
+.info-ranura {
+    /* No ensancha el módulo: toma el ancho del rack */
+    width: 0;
+    min-width: 100%;
+    box-sizing: border-box;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    --bin: var(--bin-azul);
+    background: color-mix(in srgb, var(--bin) 10%, var(--glass-strong));
+    border: 1px solid color-mix(in srgb, var(--bin) 35%, transparent);
+    border-left: 5px solid var(--bin);
+    box-shadow: var(--shadow-sm);
+    font-size: 13px;
+    animation: info-ranura-entrar 0.18s var(--curva-ios);
+}
+.info-ranura-encabezado { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.info-ranura-etiqueta {
+    flex: none;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--bin);
+    color: #fff;
+    font-weight: 700;
+    font-size: 12px;
+}
+.info-ranura.verde { --bin: var(--bin-verde); }
+.info-ranura.cafe { --bin: var(--bin-cafe); }
+.info-ranura-tipo {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: color-mix(in srgb, var(--bin) 80%, var(--txt1));
+}
+.info-ranura-codigo { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-ranura-encabezado .txt3 { flex: none; font-size: 12px; }
+.info-ranura-cerrar { margin-left: auto; flex: none; }
+.info-ranura-descripcion { margin: 6px 0 0; color: var(--txt1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.info-ranura-acciones { display: flex; gap: 6px; margin-top: 8px; }
+@keyframes info-ranura-entrar { from { opacity: 0; transform: translateY(-4px); } }
+
+/* ---------- Buscador con resultados ---------- */
+.buscador-caja { position: relative; min-width: 0; }
+.buscador-resultados {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 40;
+    width: min(440px, calc(100vw - 32px));
+    max-height: min(70vh, 560px);
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    animation: aparecer 0.18s ease;
+}
+.buscador-resultados-encabezado {
+    padding: 10px 14px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--txt3);
+    border-bottom: 1px solid var(--divider);
+}
+.buscador-resultados ul { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.buscador-resultado {
+    --bin: var(--txt3);
+    padding: 8px 10px 8px 12px;
+    border-radius: var(--radius-sm);
+    border-left: 4px solid var(--bin);
+    cursor: pointer;
+    font-size: 13px;
+}
+.buscador-resultado + .buscador-resultado { margin-top: 4px; }
+.buscador-resultado.azul { --bin: var(--bin-azul); }
+.buscador-resultado.verde { --bin: var(--bin-verde); }
+.buscador-resultado.cafe { --bin: var(--bin-cafe); }
+.buscador-resultado.activo { background: color-mix(in srgb, var(--bin) 12%, transparent); }
+.buscador-resultado-fila { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.buscador-resultado-ranura {
+    flex: none;
+    min-width: 34px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--bin);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+}
+.buscador-resultado-codigo { min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.buscador-resultado-cantidad { margin-left: auto; flex: none; font-size: 12px; color: var(--txt2); font-variant-numeric: tabular-nums; }
+.buscador-resultado-ubicacion { margin-top: 3px; font-size: 12px; color: var(--txt2); }
+.buscador-resultado-ubicacion b { color: var(--txt1); }
+.buscador-resultado-tipo { color: color-mix(in srgb, var(--bin) 80%, var(--txt1)); font-weight: 600; }
+.buscador-resultado-descripcion { margin-top: 3px; color: var(--txt1); overflow-wrap: anywhere; }
+.buscador-resultado-contenido { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 11px; color: var(--txt3); }
+.buscador-resultado-contenido b { color: var(--txt1); font-weight: 600; }
+.buscador-resultado-motivo { margin-top: 3px; font-size: 11px; font-style: italic; color: var(--txt3); }
+.buscador-resultado mark { background: rgba(255, 204, 0, 0.45); color: inherit; border-radius: 2px; padding: 0 1px; }
+.chip-cuenta.coincide { background: rgba(255, 204, 0, 0.55); color: var(--txt1); }
+/* FIFO: el resultado más antiguo es el que debe salir primero */
+.buscador-resultado-fifo {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(255, 204, 0, 0.55);
+    color: var(--txt1);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+/* ---------- Salida: bolsas o piezas ---------- */
+.salida-modal { max-height: calc(100dvh - 32px); overflow-y: auto; }
+
+/* Selector grande: bolsas completas o piezas sueltas */
+.salida-modo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.salida-modo button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--divider);
+    border-radius: var(--radius-md);
+    background: var(--fill);
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.salida-modo button b { font-size: 14px; }
+.salida-modo button span { font-size: 12px; color: var(--txt3); font-variant-numeric: tabular-nums; }
+.salida-modo button.activo { border-color: var(--accent); background: var(--accent-soft); }
+.salida-modo button.activo span { color: var(--accent); }
+.salida-modo button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Bolsas dibujadas (se tocan para elegirlas): en color lo que queda, rayado rojo lo que sale */
+.salida-instruccion { margin-top: 14px; font-size: 12px; }
+.salida-origen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--txt2);
+    font-size: 13px;
+}
+.salida-origen b { color: var(--txt1); font-size: 14px; word-break: break-all; }
+.salida-bolsas {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+    border-radius: var(--radius-md);
+    background: var(--fill);
+}
+.salida-bolsa {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: 52px;
+    padding: 4px 2px;
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.salida-bolsa:hover:not(:disabled) { background: rgba(255, 255, 255, 0.6); }
+.salida-bolsa.elegida { border-color: var(--danger); background: rgba(255, 255, 255, 0.75); }
+.salida-bolsa:disabled { opacity: 0.4; cursor: not-allowed; }
+.salida-bolsa-numero { font-size: 10px; font-weight: 700; color: var(--txt3); }
+.salida-bolsa.elegida .salida-bolsa-numero { color: var(--danger); }
+.salida-bolsa-cuerpo {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    width: 34px;
+    height: 56px;
+    border: 1.5px solid var(--txt3);
+    border-radius: 6px 6px 9px 9px;
+    background: #fff;
+    overflow: hidden;
+}
+.salida-bolsa-relleno { display: flex; flex-direction: column; transition: height 0.2s ease; }
+.salida-bolsa-sale {
+    flex: none;
+    background: repeating-linear-gradient(-45deg, var(--danger) 0 4px, rgba(215, 0, 21, 0.35) 4px 8px);
+    transition: height 0.2s ease;
+}
+.salida-bolsa-queda { flex: 1; background: var(--bin-azul); }
+.salida-bolsa.sale-toda .salida-bolsa-cuerpo { border-color: var(--danger); }
+.salida-bolsa-texto { font-size: 11px; font-weight: 700; color: var(--txt1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.salida-bolsa.sale-toda .salida-bolsa-texto { color: var(--danger); }
+.salida-bolsa-peso { min-height: 13px; font-size: 10px; color: var(--txt3); white-space: nowrap; }
+
+/* Hay / salen / quedan */
+.salida-cuentas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.salida-cuentas div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--fill); }
+.salida-cuentas span { font-size: 11px; color: var(--txt3); }
+.salida-cuentas b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.salida-cuentas .sale { background: var(--danger-soft); }
+.salida-cuentas .sale b { color: var(--danger); }
+.salida-cuentas .queda { background: var(--accent-soft); }
+.salida-cuentas .queda b { color: var(--accent); }
+.salida-cuentas small { font-size: 11px; color: var(--txt3); font-variant-numeric: tabular-nums; }
+
+/* Editor de bolsas (detalle del contenedor): piezas y peso de cada bolsa */
+.editor-bolsas { margin: 14px 0 0; padding: 0; border: 0; min-width: 0; }
+.editor-bolsas legend { margin-bottom: 6px; padding: 0; }
+.editor-bolsas-fila { display: grid; grid-template-columns: 44px 1fr 1fr; gap: 8px; align-items: start; }
+.editor-bolsas-fila + .editor-bolsas-fila { margin-top: 6px; }
+.editor-bolsas-encabezado { font-size: 11px; color: var(--txt3); }
+.editor-bolsas-numero {
+    display: grid;
+    place-items: center;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--fill);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.campo-bolsa { display: flex; flex-direction: column; min-width: 0; }
+.campo-bolsa .campo-input { width: 100%; font-variant-numeric: tabular-nums; }
+.campo-bolsa .aviso-campo { margin-top: 3px; font-size: 11px; }
+.campo-input.en-blanco { border-color: var(--warning); }
+/* Peso en NA tras una salida de piezas: solo lectura */
+.campo-input.campo-bloqueado { background: var(--fill); color: var(--txt3); font-weight: 600; cursor: not-allowed; }
+.nota-campo { margin-top: 3px; font-size: 11px; color: var(--txt3); }
+.salida-bolsa-peso.pasa-na { color: var(--warning); font-weight: 700; }
+.editor-bolsas-total { margin-top: 8px; font-size: 13px; font-weight: 600; text-align: right; }
+
+/* ---------- Vista FIFO: todo el almacén, del más antiguo al más nuevo ---------- */
+.boton-fifo { display: inline-flex; align-items: center; gap: 6px; flex: none; font-weight: 600; }
+.fifo { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.fifo-controles { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.fifo-vista { margin-top: 0; }
+.fifo-vacio { padding: 24px 0; text-align: center; }
+.fifo-lista { flex: 1; min-height: 0; margin: 12px -6px 0; padding: 0 6px; list-style: none; overflow-y: auto; }
+.fifo-lista li + li { margin-top: 6px; }
+.fifo-fila {
+    display: grid;
+    grid-template-columns: 30px 82px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: start;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.7);
+    text-align: left;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.fifo-fila:hover { background: #fff; box-shadow: var(--shadow-sm); }
+.fifo-fila.primero { border-color: rgba(255, 204, 0, 0.9); box-shadow: inset 3px 0 0 rgba(255, 204, 0, 0.9); }
+.fifo-posicion {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--fill);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.fifo-fila.primero .fifo-posicion { background: rgba(255, 204, 0, 0.55); }
+.fifo-fecha { display: flex; flex-direction: column; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fifo-fecha small { font-size: 11px; font-weight: 500; color: var(--txt3); }
+.fifo-principal { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.fifo-codigo { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.fifo-ubicacion { flex-basis: 100%; font-size: 12px; color: var(--txt2); }
+.fifo-ubicacion b {
+    display: inline-block;
+    min-width: 30px;
+    margin-right: 4px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--txt3);
+    color: #fff;
+    font-size: 11px;
+    text-align: center;
+}
+.fifo-ubicacion.azul b { background: var(--bin-azul); }
+.fifo-ubicacion.verde b { background: var(--bin-verde); }
+.fifo-ubicacion.cafe b { background: var(--bin-cafe); }
+.fifo-descripcion { flex-basis: 100%; font-size: 12px; overflow-wrap: anywhere; }
+.fifo-bolsas { display: flex; flex-wrap: wrap; gap: 4px; flex-basis: 100%; font-size: 11px; }
+.fifo-cantidad { display: flex; flex-direction: column; align-items: flex-end; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fifo-cantidad small { font-size: 11px; color: var(--txt3); }
+@media (max-width: 560px) {
+    .fifo-fila { grid-template-columns: 28px minmax(0, 1fr) auto; }
+    .fifo-fecha { grid-column: 2; grid-row: 1; flex-direction: row; gap: 6px; align-items: baseline; }
+    .fifo-principal { grid-column: 2 / 4; grid-row: 2; }
+    .fifo-cantidad { grid-column: 3; grid-row: 1; }
+    .boton-fifo { padding: 0 10px; }
+}
+
+/* Lista corta de bolsas (tarjeta de Recepción y panel de la ranura) */
+.lista-bolsas { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; }
+.lista-bolsas-chip { padding: 1px 7px; border-radius: 999px; background: var(--fill); color: var(--txt2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lista-bolsas-chip b { color: var(--txt1); }
+.lista-bolsas-total { margin-left: 2px; font-weight: 600; color: var(--txt1); }
+
+.salida-deslizador { width: 100%; margin-top: 10px; accent-color: var(--danger); }
+.salida-atajos { margin-top: 8px; }
+
+/* Campos numéricos que quedaron en 0 o vacíos: en blanco y con advertencia */
+.cantidad.en-blanco { box-shadow: inset 0 0 0 1.5px var(--warning); }
+.campo-input[aria-invalid='true'] { border-color: var(--warning); }
+.aviso-campo { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--warning); }
+.aviso-campo::before { content: '⚠ '; }
+.control-cantidad { display: flex; flex-direction: column; align-items: flex-end; }
+.control-cantidad .aviso-campo { max-width: 140px; text-align: right; font-size: 11px; }
+
+/* ---------- Piezas por bolsa ---------- */
+.control-piezas { display: inline-flex; align-items: center; gap: 8px; }
+.control-piezas-total { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.control-piezas .cantidad input::placeholder { color: var(--txt3); }
+.info-ranura-piezas { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; margin-top: 8px; }
+.info-ranura-piezas .campo-label { font-size: 12px; }
+.tarjeta-piezas { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--txt3); }
+.tarjeta-piezas .cantidad { transform: scale(0.88); transform-origin: left center; }
+
+@media (max-width: 860px) {
+    .buscador-caja { flex: 1 1 auto; max-width: 260px; }
+    .buscador-caja .buscador { max-width: none; width: 100%; }
+    .buscador-resultados { position: fixed; top: calc(52px + 6px); left: 12px; right: 12px; width: auto; }
+}
+
+/* Forma de lectura: escáner + cámara (envío automático) o manual */
+.escaner-modos { margin: 0 0 10px; }
+.escaner-modos button b { display: inline-flex; align-items: center; gap: 6px; }
+.escaner-form .campo-lector:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.escaner-form .btn-sm { white-space: nowrap; }
+.escaner .nota-campo { margin-top: 6px; }
+
+/* Contenido guardado del contenedor que se acaba de escanear */
+.lectura-contenedor { margin-top: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--accent-soft); }
+.lectura-contenedor .lectura-contenido-encabezado span { color: var(--accent); }
+.lectura-descripcion { margin: 4px 0 6px; font-weight: 600; font-size: 14px; }
+.lectura-contenedor .lista-bolsas { margin-top: 6px; }
+
+/* Ventana de una ranura con varios códigos */
+.ocupacion-ranura { margin: 14px 0 0; }
+.ranura-lista { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 0; padding: 0; list-style: none; }
+.ranura-lista-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--fill);
+}
+.ranura-lista-cabecera { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ranura-lista-codigo { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranura-lista-descripcion { margin: 0; font-size: 13px; }
+.ranura-lista-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+
+/* Número de parte bajo el código de barras del detalle */
+.modal-parte { margin: 6px 0 0; text-align: center; font-size: 13px; }
+.modal-parte b { color: var(--txt1); font-size: 14px; }
+
+/* Tres formas de lectura: escáner, cámara y manual */
+.escaner-modos { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 460px) { .escaner-modos { grid-template-columns: 1fr; } }
+
+/* ---------- Ventanas emergentes ----------
+   · Fondo casi opaco: el velo oscuro (modal-overlay) ya tiene su propio desenfoque y un desenfoque dentro de otro
+     no desenfoca nada, así que con el vidrio translúcido se veía el fondo (barras del rack, tarjetas) a través.
+   · Altura máxima con desplazamiento propio: las ventanas largas (bolsas, contenido) se cortaban por abajo.
+   · Los botones de acción quedan fijos al fondo de la ventana mientras se desplaza el contenido. */
+.modal-overlay .modal {
+    background: rgba(250, 250, 253, 0.98);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.modal-overlay .modal-acciones {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 20px -24px 0; /* hasta los bordes laterales de la ventana */
+    padding: 14px 24px calc(14px + env(safe-area-inset-bottom));
+    background: rgba(250, 250, 253, 0.98);
+    border-top: 1px solid var(--divider);
+}
+/* Con botones de acción, la ventana no lleva relleno inferior: la barra fija se pega al borde y no deja pasar
+   el contenido por debajo (la zona segura de los celulares ya la cubre la propia barra) */
+.modal-overlay .modal:has(.modal-acciones) { padding-bottom: 0; }
+@media (max-width: 860px) {
+    .modal-overlay .modal { max-height: 92dvh; padding-bottom: 24px; }
+    .modal-overlay .modal:has(.modal-acciones) { padding-bottom: 0; }
+}
+
+/* ---------- Posiciones con compartimentos (Kanban 4) ----------
+   Cada posición del rack (C-1, D-1…) es una bandeja dividida en 4 compartimentos (2 x 2). Los compartimentos son
+   celdas planas, sin la etiqueta blanca ni el relieve del contenedor suelto: con decenas en pantalla eso era ruido.
+   Libre = celda clara con su número; ocupada = color del contenedor con bolsas y número de parte. */
+.posicion {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+    min-width: 0;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 0 0 1px rgba(47, 98, 196, 0.2), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.ranura.mini { border-radius: 7px; }
+.ranura.mini .contenedor {
+    height: 46px;
+    padding: 3px 4px;
+    gap: 1px;
+    border-radius: 7px;
+    background: linear-gradient(180deg, var(--bin-claro), var(--bin));
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+}
+.compartimento-numero {
+    position: absolute;
+    top: 2px;
+    left: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-variant-numeric: tabular-nums;
+}
+.compartimento-mas {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    padding: 0 4px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--bin);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 12px;
+}
+.compartimento-bolsas {
+    margin-top: 4px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+.compartimento-bolsas small { margin-left: 2px; font-size: 9px; font-weight: 600; opacity: 0.85; }
+.compartimento-parte {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+/* Compartimento libre: hueco claro con el tono de su color y el número a la vista */
+.ranura.mini.vacia .contenedor {
+    background: color-mix(in srgb, var(--bin) 7%, #fff);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bin) 22%, transparent);
+}
+.ranura.mini.vacia .contenedor::before { display: none; }
+.ranura.mini.vacia .compartimento-numero { color: color-mix(in srgb, var(--bin) 70%, #fff); }
+/* Las reglas de arriba pisan las generales de ranura libre; se repiten aquí los estados de mover y pintar */
+.ranura.mini.destino.vacia .contenedor { box-shadow: inset 0 0 0 1.5px rgba(0, 113, 227, 0.5); }
+.ranura.mini.destino.vacia .contenedor:hover,
+.ranura.mini.sobre.vacia .contenedor { background: var(--accent-soft); }
+.ranura.mini.sobre .contenedor { box-shadow: 0 0 0 2px var(--accent), var(--shadow-md); }
+.pintando .ranura.mini.vacia .contenedor { background: color-mix(in srgb, var(--bin) 30%, rgba(255, 255, 255, 0.85)); }
+/* La posición necesita más ancho que una ranura suelta para que sus 4 compartimentos se lean */
+.rack.con-compartimentos {
+    --ideal: calc(var(--columnas, 4) * 150px + (var(--columnas, 4) - 1) * 8px + 46px);
+    --minimo: calc(var(--columnas, 4) * 104px + (var(--columnas, 4) - 1) * 8px + 46px);
+}
+@media (max-width: 860px) {
+    .rack.con-compartimentos .rack-ranuras,
+    .rack.con-compartimentos .rack-riel { grid-template-columns: repeat(var(--columnas), minmax(104px, 1fr)); }
+}

@@ -1,0 +1,39 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+*.local
+
+# Variables de entorno (usar los .env.example como plantilla)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Caches y herramientas
+.cache/
+.vite/
+coverage/
+.eslintcache
+
+# Exportaciones generadas
+*.xlsx
+
+# Editores y sistema
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
